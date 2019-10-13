@@ -28,7 +28,7 @@
      7 November 2018 -- assure identical legacy and extended flags in laszip_write_point()
     20 October 2018 -- changed (U8*) to (const U8*) for all out->put___() calls
      5 October 2018 -- corrected 'is_empty' return value in laszip_inside_rectangle()
-    29 September 2018 -- laszip_prepare_point_for_write() sets extended_point_type 
+    29 September 2018 -- laszip_prepare_point_for_write() sets extended_point_type
     19 September 2018 -- removed tuples and triple support from attributes
      7 September 2018 -- replaced calls to _strdup with calls to the LASCopyString macro
      6 April 2018 -- added zero() function to laszip_dll struct to fix memory leak
@@ -156,6 +156,8 @@ typedef struct laszip_dll {
   I32 start_NIR_band;
   laszip_dll_inventory* inventory;
   std::vector<void *> buffers;
+  const U8* array_data;
+  I64 array_data_size;
 
   void zero()
   {
@@ -193,6 +195,8 @@ typedef struct laszip_dll {
     start_flags_and_channel = 0;
     start_NIR_band = 0;
     inventory = NULL;
+    array_data = NULL;
+    array_data_size = 0;
   };
 } laszip_dll_struct;
 
@@ -2174,7 +2178,7 @@ laszip_prepare_point_for_write(
     // must *not* be set for the old point type 5 or lower
 
     laszip_dll->point.extended_point_type = 0;
-    
+
     // we are *not* operating in compatibility mode
 
     laszip_dll->compatibility_mode = FALSE;
@@ -3977,7 +3981,7 @@ laszip_read_header(
   }
 
   // create point's item pointers
-  
+
   if (laszip_dll->point_items)
   {
     delete [] laszip_dll->point_items;
@@ -4370,6 +4374,82 @@ laszip_open_reader(
   catch (...)
   {
     sprintf(laszip_dll->error, "internal error in laszip_open_reader");
+    return 1;
+  }
+
+  laszip_dll->error[0] = '\0';
+  return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+LASZIP_API laszip_I32
+laszip_open_reader_array(
+    laszip_POINTER                     pointer
+    , const laszip_U8*                 data
+    , laszip_I64                       data_size
+    , laszip_BOOL*                     is_compressed
+)
+{
+  if (pointer == 0) return 1;
+  laszip_dll_struct* laszip_dll = (laszip_dll_struct*)pointer;
+
+  try
+  {
+    if (is_compressed == 0)
+    {
+      sprintf(laszip_dll->error, "laszip_BOOL pointer 'is_compressed' is zero");
+      return 1;
+    }
+
+    if (laszip_dll->writer)
+    {
+      sprintf(laszip_dll->error, "writer is already open");
+      return 1;
+    }
+
+    if (laszip_dll->reader)
+    {
+      sprintf(laszip_dll->error, "reader is already open");
+      return 1;
+    }
+
+    laszip_dll->array_data = data;
+    laszip_dll->array_data_size = data_size;
+
+    if (IS_LITTLE_ENDIAN())
+      laszip_dll->streamin = new ByteStreamInArrayLE(laszip_dll->array_data, laszip_dll->array_data_size);
+    else
+      laszip_dll->streamin = new ByteStreamInArrayBE(laszip_dll->array_data, laszip_dll->array_data_size);
+
+    if (laszip_dll->streamin == 0)
+    {
+      sprintf(laszip_dll->error, "could not alloc ByteStreamInArray");
+      return 1;
+    }
+
+    // read the header variable after variable
+
+    if (laszip_read_header(laszip_dll, is_compressed))
+    {
+      return 1;
+    }
+
+    // should we try to exploit existing spatial indexing information
+
+    // if (laszip_dll->lax_exploit)
+    // {
+    //   laszip_dll->lax_index = new LASindex();
+
+    //   if (!laszip_dll->lax_index->read(file_name))
+    //   {
+    //     delete laszip_dll->lax_index;
+    //     laszip_dll->lax_index = 0;
+    //   }
+    // }
+  }
+  catch (...)
+  {
+    sprintf(laszip_dll->error, "internal error in laszip_open_reader_array");
     return 1;
   }
 
