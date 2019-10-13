@@ -520,6 +520,15 @@ laszip_open_reader(
 
 /*---------------------------------------------------------------------------*/
 LASZIP_API laszip_I32
+laszip_open_reader_array(
+    laszip_POINTER                     pointer
+    , const laszip_U8*                 data
+    , const laszip_I64                 data_size
+    , laszip_BOOL*                     is_compressed
+);
+
+/*---------------------------------------------------------------------------*/
+LASZIP_API laszip_I32
 laszip_has_spatial_index(
     laszip_POINTER                     pointer
     , laszip_BOOL*                     is_indexed
