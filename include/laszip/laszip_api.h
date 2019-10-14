@@ -474,6 +474,22 @@ laszip_open_writer(
 
 /*---------------------------------------------------------------------------*/
 LASZIP_API laszip_I32
+laszip_open_writer_array(
+    laszip_POINTER                     pointer
+    , laszip_I64                       alloc
+    , laszip_BOOL                      compress
+);
+
+/*---------------------------------------------------------------------------*/
+LASZIP_API laszip_I32
+laszip_writer_get_data(
+    laszip_POINTER                     pointer
+    , laszip_U8**                      data
+    , laszip_I64*                      data_size
+);
+
+/*---------------------------------------------------------------------------*/
+LASZIP_API laszip_I32
 laszip_write_point(
     laszip_POINTER                     pointer
 );

@@ -659,6 +659,52 @@ laszip_open_writer
 };
 
 /*---------------------------------------------------------------------------*/
+typedef laszip_I32 (*laszip_open_writer_array_def)
+(
+    laszip_POINTER                     pointer
+    , laszip_I64                       alloc
+    , laszip_BOOL                      compress
+);
+laszip_open_writer_array_def laszip_open_writer_array_ptr = 0;
+LASZIP_API laszip_I32
+laszip_open_writer_array
+(
+    laszip_POINTER                     pointer
+    , laszip_I64                       alloc
+    , laszip_BOOL                      compress
+)
+{
+  if (laszip_open_writer_array_ptr)
+  {
+    return (*laszip_open_writer_array_ptr)(pointer, alloc, compress);
+  }
+  return 1;
+};
+
+/*---------------------------------------------------------------------------*/
+typedef laszip_I32 (*laszip_writer_get_data_def)
+(
+    laszip_POINTER                     pointer
+    , laszip_U8**                      data
+    , laszip_I64*                      data_size
+);
+laszip_writer_get_data_def laszip_writer_get_data_ptr = 0;
+LASZIP_API laszip_I32
+laszip_writer_get_data
+(
+    laszip_POINTER                     pointer
+    , laszip_U8**                      data
+    , laszip_I64*                      data_size
+)
+{
+  if (laszip_writer_get_data_ptr)
+  {
+    return (*laszip_writer_get_data_ptr)(pointer, data, data_size);
+  }
+  return 1;
+};
+
+/*---------------------------------------------------------------------------*/
 typedef laszip_I32 (*laszip_write_point_def)
 (
     laszip_POINTER                     pointer
@@ -1129,6 +1175,16 @@ laszip_I32 laszip_load_dll()
   }
   laszip_open_writer_ptr = (laszip_open_writer_def)GetProcAddress(laszip_HINSTANCE, "laszip_open_writer");
   if (laszip_open_writer_ptr == NULL) {
+     FreeLibrary(laszip_HINSTANCE);
+     return 1;
+  }
+  laszip_open_writer_array_ptr = (laszip_open_writer_array_def)GetProcAddress(laszip_HINSTANCE, "laszip_open_writer_array");
+  if (laszip_open_writer_array_ptr == NULL) {
+     FreeLibrary(laszip_HINSTANCE);
+     return 1;
+  }
+  laszip_writer_get_data_ptr = (laszip_writer_get_data_def)GetProcAddress(laszip_HINSTANCE, "laszip_writer_get_data");
+  if (laszip_writer_get_data_ptr == NULL) {
      FreeLibrary(laszip_HINSTANCE);
      return 1;
   }

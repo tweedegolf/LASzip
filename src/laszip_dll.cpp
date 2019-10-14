@@ -158,6 +158,7 @@ typedef struct laszip_dll {
   std::vector<void *> buffers;
   const U8* array_data;
   I64 array_data_size;
+  BOOL array_output_mode;
 
   void zero()
   {
@@ -197,6 +198,7 @@ typedef struct laszip_dll {
     inventory = NULL;
     array_data = NULL;
     array_data_size = 0;
+    array_output_mode = FALSE;
   };
 } laszip_dll_struct;
 
@@ -436,6 +438,15 @@ laszip_clean(
         free(laszip_dll->buffers[i]);
       }
       laszip_dll->buffers.clear();
+    }
+
+    // dealloc array data when in output mode and data has been set
+
+    if (laszip_dll->array_output_mode == TRUE && laszip_dll->array_data != NULL) {
+      free((laszip_U8*)laszip_dll->array_data);
+      laszip_dll->array_output_mode = FALSE;
+      laszip_dll->array_data = NULL;
+      laszip_dll->array_data_size = 0;
     }
 
     // zero every field of the laszip_dll struct
@@ -3019,6 +3030,148 @@ laszip_open_writer(
 
 /*---------------------------------------------------------------------------*/
 LASZIP_API laszip_I32
+laszip_open_writer_array(
+    laszip_POINTER                     pointer
+    , laszip_I64                       alloc
+    , laszip_BOOL                      compress
+)
+{
+  if (pointer == 0) return 1;
+  laszip_dll_struct* laszip_dll = (laszip_dll_struct*)pointer;
+
+  try
+  {
+    if (laszip_dll->reader)
+    {
+      sprintf(laszip_dll->error, "reader is already open");
+      return 1;
+    }
+
+    if (laszip_dll->writer)
+    {
+      sprintf(laszip_dll->error, "writer is already open");
+      return 1;
+    }
+
+    // create the outstream
+
+    laszip_dll->array_output_mode = TRUE;
+
+    if (IS_LITTLE_ENDIAN())
+      laszip_dll->streamout = new ByteStreamOutArrayLE(alloc);
+    else
+      laszip_dll->streamout = new ByteStreamOutArrayBE(alloc);
+
+    if (laszip_dll->streamout == 0)
+    {
+      sprintf(laszip_dll->error, "could not alloc ByteStreamOutArray");
+      return 1;
+    }
+
+    // setup the items that make up the point
+
+    LASzip laszip;
+    if (setup_laszip_items(laszip_dll, &laszip, compress))
+    {
+      return 1;
+    }
+
+    // prepare header
+
+    if (laszip_prepare_header_for_write(laszip_dll))
+    {
+      return 1;
+    }
+
+    // prepare point
+
+    if (laszip_prepare_point_for_write(laszip_dll, compress))
+    {
+      return 1;
+    }
+
+    // prepare VLRs
+
+    if (laszip_prepare_vlrs_for_write(laszip_dll))
+    {
+      return 1;
+    }
+
+    // write header variable after variable
+
+    if (laszip_write_header(laszip_dll, &laszip, compress))
+    {
+      return 1;
+    }
+
+    // create the point writer
+
+    if (create_point_writer(laszip_dll, &laszip))
+    {
+      return 1;
+    }
+
+    // if (laszip_dll->lax_create)
+    // {
+	  //   // create spatial indexing information using cell_size = 100.0f and threshold = 1000
+
+	  //   LASquadtree* lasquadtree = new LASquadtree;
+	  //   lasquadtree->setup(laszip_dll->header.min_x, laszip_dll->header.max_x, laszip_dll->header.min_y, laszip_dll->header.max_y, 100.0f);
+
+	  //   laszip_dll->lax_index = new LASindex;
+	  //   laszip_dll->lax_index->prepare(lasquadtree, 1000);
+
+    //   // copy the file name for later
+
+    //   laszip_dll->lax_file_name = LASCopyString(file_name);
+    // }
+
+    // set the point number and point count
+
+    laszip_dll->npoints = (laszip_dll->header.number_of_point_records ? laszip_dll->header.number_of_point_records : laszip_dll->header.extended_number_of_point_records);
+    laszip_dll->p_count = 0;
+  }
+  catch (...)
+  {
+    sprintf(laszip_dll->error, "internal error in laszip_open_writer_array");
+    return 1;
+  }
+
+  laszip_dll->error[0] = '\0';
+  return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+LASZIP_API laszip_I32
+laszip_writer_get_data(
+    laszip_POINTER                     pointer
+    , laszip_U8**                      data
+    , laszip_I64*                      data_size
+)
+{
+  if (pointer == 0) return 1;
+  laszip_dll_struct* laszip_dll = (laszip_dll_struct*)pointer;
+
+  if (laszip_dll->array_output_mode != TRUE) {
+    sprintf(laszip_dll->error, "writer data requires ByteStreamOutArray");
+    return 1;
+  }
+
+  if (laszip_dll->array_data == NULL) {
+    sprintf(laszip_dll->error, "array data was not filled");
+    return 1;
+  }
+
+  (*data_size) = laszip_dll->array_data_size;
+  (*data) = (laszip_U8*)laszip_dll->array_data;
+  laszip_dll->array_data = NULL;
+  laszip_dll->array_data_size = 0;
+
+  return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+LASZIP_API laszip_I32
 laszip_write_point(
     laszip_POINTER                     pointer
 )
@@ -3343,6 +3496,12 @@ laszip_close_writer(
 
       delete laszip_dll->lax_index;
       laszip_dll->lax_index = 0;
+    }
+
+    if (laszip_dll->array_output_mode == TRUE) {
+      ByteStreamOutArray* stream_data = dynamic_cast<ByteStreamOutArray*>(laszip_dll->streamout);
+      laszip_dll->array_data_size = stream_data->getSize();
+      laszip_dll->array_data = stream_data->takeData();
     }
 
     delete laszip_dll->streamout;
