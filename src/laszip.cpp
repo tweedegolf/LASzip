@@ -29,12 +29,26 @@
 ===============================================================================
 */
 #include "laszip.hpp"
-#include "mydefs.hpp"
+
 #include <assert.h>
 
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+
+#if defined(_MSC_VER)
+wchar_t* UTF8toUTF16(const char* utf8)
+{
+  wchar_t* utf16 = 0;
+  int len = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, 0, 0);
+  if (len > 0)
+  {
+    utf16 = new wchar_t[len];
+    MultiByteToWideChar(CP_UTF8, 0, utf8, -1, utf16, len);
+  }
+  return utf16;
+}
+#endif
 
 LASzip::LASzip()
 {
@@ -1001,3 +1015,4 @@ const char* LASitem::get_name() const
   }
   return 0;
 }
+
